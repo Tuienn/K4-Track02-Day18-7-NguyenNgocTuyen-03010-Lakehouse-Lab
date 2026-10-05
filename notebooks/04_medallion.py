@@ -155,3 +155,36 @@ assert n_dates >= 7, (
 # - [ ] Silver has fewer rows than Bronze (dedup worked)
 # - [ ] Gold spans ≥ 7 dates × 3 models (slide §8 medallion contract)
 # - [ ] Cost & error_rate columns populated and non-zero
+
+# %%
+pl.Config.set_tbl_rows(30)
+pl.Config.set_tbl_cols(12)
+pl.Config.set_tbl_width_chars(160)
+print("Full Gold output:")
+print(gold_df.sort(["date", "model"]))
+quality_checks = {
+    "three Delta storage layers exist": all((Path(p) / "_delta_log").is_dir() for p in [BRONZE, SILVER, GOLD]),
+    "≥ 7 dates and exactly 3 models": n_dates >= 7 and n_models == 3,
+    "every date has all 3 model aggregates": gold_df.group_by("date").agg(pl.col("model").n_unique()).get_column("model").eq(3).all(),
+    "date-model groups unique": gold_df.select(["date", "model"]).n_unique() == gold_df.height,
+    "Gold has complete cross product": gold_df.height == n_dates * n_models,
+    "metrics non-null": all(gold_df[c].null_count() == 0 for c in ["p50_latency_ms", "p95_latency_ms", "cost_usd", "error_rate"]),
+    "metrics finite": all(gold_df[c].is_finite().all() for c in ["p50_latency_ms", "p95_latency_ms", "cost_usd", "error_rate"]),
+    "p50 ≤ p95": (gold_df["p50_latency_ms"] <= gold_df["p95_latency_ms"]).all(),
+    "positive cost": (gold_df["cost_usd"] > 0).all(),
+    "error rate within [0,1]": gold_df["error_rate"].is_between(0, 1).all(),
+}
+for name, ok in quality_checks.items():
+    print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
+assert all(quality_checks.values()), "Gold rubric quality failed"
+print("NB4 complete, including full Gold rubric verification.")
+
+# %% [markdown]
+# ## Giải thích kết quả — Nguyễn Ngọc Tuyền, 2A202603010
+# Bronze giữ request JSON thô/retry; Silver chuẩn hóa kiểu và dedup request_id.
+# Silver ít hơn Bronze chứng minh loại retry; Gold tổng hợp theo ngày và model.
+# Đối chiếu đủ 3 model cho từng ngày, p50≤p95, chi phí dương, error_rate∈[0,1].
+# p95 đo đuôi latency, cost được tính theo tokens; giá trong COST_TABLE là
+# giá minh họa của đề, không phải giá nhà cung cấp đã tra cứu.
+# Query này lọc model NULL; dữ liệu JSON sai cú pháp thực sự cần json_valid/
+# try-cast trước parse trong production, không suy ra robustness từ dữ liệu giả.
