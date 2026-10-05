@@ -166,7 +166,9 @@ print(
 # %%
 speedup = before / max(after, 1e-6)
 checks = {
+    "≥ 100 initial small files":      files_before >= 100,
     "compaction reduced file count":  files_after < files_before,
+    "nonempty target file range":      0 < hits <= files_after,
     "speedup ≥ 3x OR pruning ≥ 10x":  speedup >= 3 or pruned_ratio >= 10,
     "stats isolate the target user":  hits <= max(2, files_after // 4),
 }
@@ -176,3 +178,11 @@ print(f"\n  (speedup={speedup:.1f}x, pruning={pruned_ratio:.1f}x — the slide a
 print("   wall-clock is noisy on a laptop, which is why file-pruning is the fallback.)")
 assert all(checks.values()), "NB2 incomplete — see FAIL rows above"
 print("\nNB2 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả — Nguyễn Ngọc Tuyền, 2A202603010
+# 200 append tạo ≥100 file nhỏ, tăng chi phí mở file và đọc metadata. Compaction
+# giảm số file; Z-order gom user_id vào các range hẹp để point query skip file.
+# Pruning ratio là tổng file sau tối ưu chia số file có min/max chứa 4242,
+# không phải số byte đo ở ổ đĩa. Giữ nhiều file là cần thiết để đo skipping.
+# Timing có nhiễu do cache/CPU/I/O; đề chấp nhận speedup ≥3× HOẶC pruning ≥10×.
