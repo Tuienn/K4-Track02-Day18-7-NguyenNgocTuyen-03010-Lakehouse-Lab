@@ -479,3 +479,39 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB8 incomplete — see FAIL rows above"
 print("\nNB8 complete.")
+
+# %%
+expected_policies = {"policy-v2", "policy-v3"}
+expected_buckets = {"licensed", "public_domain", "scraped_optout_checked", "synthetic"}
+observed_policies = set(gold.column("agent_version").to_pylist())
+observed_buckets = {p.split("=", 1)[1] for p in parts}
+# Read the exact corpus version used by the training filter, before deletion.
+con.register("governed_pinned", DeltaTable(GOVERNED, version=corpus_version).to_pyarrow_table())
+excluded_persisted = con.sql("SELECT count(*) FROM governed_pinned WHERE provenance_bucket = 'UNCLASSIFIED'").fetchone()[0]
+trainable_persisted = con.sql("SELECT count(*) FROM governed_pinned WHERE provenance_bucket <> 'UNCLASSIFIED'").fetchone()[0]
+extra_checks = {
+    "Silver partition policy names match": {p.name.split("=", 1)[1] for p in Path(SILVER).glob("agent_version=*")} == expected_policies,
+    "Gold contains exact policies": observed_policies == expected_policies,
+    "four named buckets and UNCLASSIFIED": observed_buckets == expected_buckets | {"UNCLASSIFIED"},
+    "persisted trainable filter excludes all UNCLASSIFIED": excluded_persisted == unclassified and trainable_persisted == trainable and trainable_persisted + excluded_persisted == governed.num_rows,
+    "subject usage accounted before deletion": sum(row["rows"] for row in usage) == before,
+}
+for name, ok in extra_checks.items():
+    print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
+assert all(extra_checks.values())
+print(f"Persisted corpus v{corpus_version}: trainable={trainable_persisted}, excluded={excluded_persisted}")
+
+# %% [markdown]
+# ## Giải thích kết quả — Nguyễn Ngọc Tuyền, 2A202603010
+# Silver partition theo policy-v2/v3; Gold có rollup cho đúng cả hai policy.
+# Training run pin version trước append, nên replay đúng số bước đã ghi nhận.
+# Phép replay này chỉ so row count, chưa so hash/nội dung hay tái lập training.
+# 5 list_tables dùng cache và chỉ đọc catalog 1 lần; tools/list không được đo
+# cache. input_required, confirmed và task poll là mô phỏng offline; confirmed
+# do caller tự truyền, delete_rows là no-op, không phải authorization production.
+# 4 bucket minh họa cùng UNCLASSIFIED tồn tại; kiểm tra persisted corpus ở version
+# đã pin cho thấy training filter loại hết UNCLASSIFIED trước subject delete.
+# Mapping CC-BY vào public_domain là hạn chế của fixture (CC-BY cần ghi công);
+# consent+user-owned cũng chưa chứng minh scraping opt-out. Không dùng mapping
+# này làm chứng nhận pháp lý. Xóa user_007 chỉ tác động version hiện tại,
+# không xóa version cũ, backup, index, hoặc ảnh hưởng đã nằm trong model.
