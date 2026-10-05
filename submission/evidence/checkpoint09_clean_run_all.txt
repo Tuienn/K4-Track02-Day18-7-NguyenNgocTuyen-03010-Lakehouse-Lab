@@ -1,0 +1,12 @@
+Running 8 notebooks with /tmp/lakehouse-day18-clean-venv/bin/python
+
+  PASS  01_delta_basics.py                  0.7s
+  PASS  02_optimize_zorder.py               7.2s
+  PASS  03_time_travel.py                   0.7s
+  PASS  04_medallion.py                     3.2s
+  PASS  05_iceberg_catalog.py               1.6s
+  PASS  06_maintenance.py                   8.1s
+  PASS  07_vectors_multimodal.py            1.2s
+  PASS  08_agents_provenance.py             1.5s
+
+8/8 passed in 24.1s

@@ -1,0 +1,10 @@
+PASS 01_delta_basics.ipynb: 10 executed cells, matching source/output, PNG 1600×1745
+PASS 02_optimize_zorder.ipynb: 8 executed cells, matching source/output, PNG 1600×2245
+PASS 03_time_travel.ipynb: 8 executed cells, matching source/output, PNG 1600×1266
+PASS 04_medallion.ipynb: 7 executed cells, matching source/output, PNG 1600×2702
+PASS 05_iceberg_catalog.ipynb: 15 executed cells, matching source/output, PNG 1600×2593
+PASS 06_maintenance.ipynb: 17 executed cells, matching source/output, PNG 1600×3289
+PASS 07_vectors_multimodal.ipynb: 15 executed cells, matching source/output, PNG 1600×3071
+PASS 08_agents_provenance.ipynb: 17 executed cells, matching source/output, PNG 1600×3833
+PASS reflection ≤200 whitespace words: 189
+PASS 8/8 submission artifacts complete; GitHub submission remains pending.
