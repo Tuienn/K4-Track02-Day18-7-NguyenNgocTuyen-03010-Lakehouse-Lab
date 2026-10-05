@@ -1,0 +1,60 @@
+Cell [4]
+shape: (3, 4)
+┌─────┬─────────┬─────┬────────┐
+│ id  ┆ name    ┆ age ┆ city   │
+│ --- ┆ ---     ┆ --- ┆ ---    │
+│ i64 ┆ str     ┆ i64 ┆ str    │
+╞═════╪═════════╪═════╪════════╡
+│ 1   ┆ alice   ┆ 30  ┆ Hanoi  │
+│ 2   ┆ bob     ┆ 25  ┆ HCMC   │
+│ 3   ┆ charlie ┆ 35  ┆ Danang │
+└─────┴─────────┴─────┴────────┘
+
+History:
+  v0  WRITE  {'num_added_files': 1, 'num_removed_files': 0, 'num_partitions': 0, 'num_added_rows': 3, 'execution_time_ms': 5, 'num_retries': 0}
+
+
+Cell [5]
+BLOCKED by schema enforcement (expected): Exception: Cast error: Cannot cast string 'thirty' to value of Int64 type
+
+
+Cell [6]
+Rejected write left table version and row count unchanged.
+
+
+Cell [7]
+shape: (4, 5)
+┌─────┬─────────┬─────┬────────┬─────────┐
+│ id  ┆ name    ┆ age ┆ city   ┆ tier    │
+│ --- ┆ ---     ┆ --- ┆ ---    ┆ ---     │
+│ i64 ┆ str     ┆ i64 ┆ str    ┆ str     │
+╞═════╪═════════╪═════╪════════╪═════════╡
+│ 1   ┆ alice   ┆ 30  ┆ Hanoi  ┆ null    │
+│ 2   ┆ bob     ┆ 25  ┆ HCMC   ┆ null    │
+│ 3   ┆ charlie ┆ 35  ┆ Danang ┆ null    │
+│ 4   ┆ dan     ┆ 28  ┆ Hue    ┆ premium │
+└─────┴─────────┴─────┴────────┴─────────┘
+
+
+Cell [8]
+[('premium', 1), (None, 3)]
+
+
+Cell [9]
+  [PASS] _delta_log/ has JSON commits
+  [PASS] schema enforcement blocked bad write
+  [PASS] tier column added via schema_mode=merge
+  [PASS] duckdb sees 2 tier groups
+
+NB1 complete.
+
+
+Cell [10]
+
+Delta commit files: ['00000000000000000000.json', '00000000000000000001.json']
+Commit v0 JSON (actual file contents):
+{"commitInfo":{"timestamp":1791169965551,"operation":"WRITE","operationParameters":{"mode":"Overwrite"},"engineInfo":"delta-rs:py-1.6.6","operationMetrics":{"num_added_files":1,"num_removed_files":0,"num_partitions":0,"num_added_rows":3,"execution_time_ms":5,"num_retries":0},"clientVersion":"delta-rs.py-1.6.6"}}
+{"protocol":{"minReaderVersion":1,"minWriterVersion":2}}
+{"metaData":{"id":"9982911f-5486-4cc7-abcd-fbba2e017198","name":null,"description":null,"format":{"provider":"parquet","options":{}},"schemaString":"{\"type\":\"struct\",\"fields\":[{\"name\":\"id\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"name\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}},{\"name\":\"age\",\"type\":\"long\",\"nullable\":true,\"metadata\":{}},{\"name\":\"city\",\"type\":\"string\",\"nullable\":true,\"metadata\":{}}]}","partitionColumns":[],"createdTime":1791169965546,"configuration":{}}}
+{"add":{"path":"part-00000-b37444e3-94cf-4ac2-b2ac-7ce20d86aac3-c000.snappy.parquet","partitionValues":{},"size":1384,"modificationTime":1791169965551,"dataChange":true,"stats":"{\"numRecords\":3,\"minValues\":{\"id\":1,\"age\":25,\"name\":\"alice\",\"city\":\"Danang\"},\"maxValues\":{\"age\":35,\"id\":3,\"name\":\"charlie\",\"city\":\"Hanoi\"},\"nullCount\":{\"name\":0,\"age\":0,\"city\":0,\"id\":0}}","tags":null,"baseRowId":null,"defaultRowCommitVersion":null,"clusteringProvider":null}}
+Evolved schema: Schema([Field(id, PrimitiveType("long"), nullable=True), Field(name, PrimitiveType("string"), nullable=True), Field(age, PrimitiveType("long"), nullable=True), Field(city, PrimitiveType("string"), nullable=True), Field(tier, PrimitiveType("string"), nullable=True)])
