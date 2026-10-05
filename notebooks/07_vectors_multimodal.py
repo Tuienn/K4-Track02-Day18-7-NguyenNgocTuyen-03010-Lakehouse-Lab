@@ -403,3 +403,18 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB7 incomplete — see FAIL rows above"
 print("\nNB7 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả — Nguyễn Ngọc Tuyền, 2A202603010
+# Column projection khi phân tích topic tránh đọc cột blob. Random access một
+# frame lại chịu granularity của row group; amplification ở đây là ước lượng
+# từ Parquet footer (uncompressed total_byte_size), không phải trace I/O vật lý
+# có page index/cache. Pointer cho phép lấy một object; total storage không
+# tự giảm vì blob vẫn tồn tại ngoài bảng.
+# Quantization int8 giảm bytes nhưng cần đo cả recall exact-ID và topic fidelity.
+# Embeddings theo topic là synthetic, nên fidelity cao không chứng minh chất
+# lượng model thật. Delta đọc vector về list, phải cast FLOAT[256] khi query SQL.
+# Xóa subject ở bảng nguồn không xóa bản sao external index; CDF delete mang
+# doc_id để derived index evict. Bug được tái hiện, chưa triển khai consumer
+# đồng bộ index production. Brute-force SQL ở corpus nhỏ là đường phân tích,
+# không phải benchmark latency online ở quy mô triệu vector.
