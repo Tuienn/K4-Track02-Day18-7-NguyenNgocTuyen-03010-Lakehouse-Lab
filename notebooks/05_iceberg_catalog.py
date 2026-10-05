@@ -199,7 +199,7 @@ data_bytes = du(f"{loc}/data")
 print(f"data/     {human(data_bytes):>10}   ({count_files(f'{loc}/data')} parquet files)")
 print(f"metadata/ {human(meta_bytes):>10}   ({count_files(f'{loc}/metadata', '.avro')} avro + "
       f"{count_files(f'{loc}/metadata', '.json')} json)")
-print(f"→ metadata is {meta_bytes / max(data_bytes, 1) * 100:.1f}% of table size")
+print(f"→ metadata:data byte ratio = {meta_bytes / max(data_bytes, 1):.3f} ({meta_bytes / max(data_bytes, 1) * 100:.1f}% of data bytes)")
 print("\nAt 10 rows/file this looks absurd. At 512 MB/file it is ~0.1%.")
 print("Small files punish you TWICE: more data files AND more metadata to plan over.")
 
@@ -215,6 +215,8 @@ print("Small files punish you TWICE: more data files AND more metadata to plan o
 # %%
 from pyiceberg.types import StringType  # noqa: E402
 
+latency_id_before = tbl.schema().find_field("latency_ms").field_id
+data_paths_before_rename = set(tbl.inspect.files().column("file_path").to_pylist())
 print("Field IDs before:", [(f.field_id, f.name) for f in tbl.schema().fields])
 
 with tbl.update_schema() as upd:
@@ -226,6 +228,8 @@ with tbl.update_schema() as upd:
 tbl = cat.load_table(f"{ns}.llm_events")
 
 print("Field IDs after :", [(f.field_id, f.name) for f in tbl.schema().fields])
+assert tbl.schema().find_field("latency_millis").field_id == latency_id_before == 4
+assert set(tbl.inspect.files().column("file_path").to_pylist()) == data_paths_before_rename
 print("\nlatency_ms → latency_millis kept field_id=4: a rename rewrote NO data.")
 print("Old rows read back with tier=NULL — no backfill, no migration job.")
 
@@ -299,3 +303,21 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB5 incomplete — see FAIL rows above"
 print("\nNB5 complete.")
+
+# %%
+assert cat.load_table(f"{ns}.llm_events").metadata_location == tbl.metadata_location
+assert (ns, "llm_events") in cat.list_tables(ns)
+ts_id = tbl.schema().find_field("ts").field_id
+assert any(f.source_id == ts_id and isinstance(f.transform, DayTransform) for f in tbl.spec().fields)
+assert meta_bytes > 0 and data_bytes > 0
+print("Verified catalog registration, day(ts), stable rename ID/data paths, metadata:data ratio.")
+
+# %% [markdown]
+# ## Giải thích kết quả — Nguyễn Ngọc Tuyền, 2A202603010
+# Catalog đăng ký bảng và trỏ tới metadata, giúp tra cứu bảng bằng tên. Lọc ts
+# được day(ts) chuyển thành điều kiện partition; plan_files đo số file cần đọc,
+# không phải bytes/network thực đọc. Metadata:data dùng mẫu số data bytes.
+# Rename giữ field_id=4 và nguyên tập đường dẫn data, nên không rewrite Parquet.
+# Thêm identity(model) tạo spec mới; file cũ và mới vẫn cùng đọc trong một bảng.
+# Catalog SQLite này không chứng minh auth hay scan planning từ server.
+# Các phép tính bill trong đề chỉ minh họa với đơn giá giả định, không báo giá mới.
