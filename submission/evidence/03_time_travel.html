@@ -1,0 +1,48 @@
+<!doctype html><html lang="vi"><meta charset="utf-8">
+<title>03_time_travel — output thực thi</title>
+<style>body{font:16px sans-serif;margin:36px;max-width:1400px}pre{font:15px monospace;
+white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #ccc;padding:18px;
+line-height:1.45;background:#f7f8fa}h1{font-size:24px}</style>
+<h1>03_time_travel</h1><p>Nguyễn Ngọc Tuyền · 2A202603010 · Lightweight</p>
+<p>Output lấy nguyên văn từ notebook đã thực thi, không sửa số liệu.</p>
+<pre>Cell [3]
+MERGE 100K rows: 0.05s
+MERGE metrics: {&#x27;num_source_rows&#x27;: 100000, &#x27;num_target_rows_inserted&#x27;: 50000, &#x27;num_target_rows_updated&#x27;: 50000, &#x27;num_target_rows_deleted&#x27;: 0, &#x27;num_target_rows_copied&#x27;: 50000, &#x27;num_output_rows&#x27;: 150000, &#x27;num_target_files_scanned&#x27;: 1, &#x27;num_target_files_skipped_during_scan&#x27;: 0, &#x27;num_target_files_added&#x27;: 1, &#x27;num_target_files_removed&#x27;: 1, &#x27;execution_time_ms&#x27;: 46, &#x27;scan_time_ms&#x27;: 34, &#x27;rewrite_time_ms&#x27;: 5}
+Verified: 50K updates + 50K inserts; target 150K unique customers.
+
+
+Cell [4]
+  v 3  WRITE                      metrics={&#x27;num_added_files&#x27;: 1, &#x27;num_removed_files&#x27;: 0, &#x27;num_partitions&#x27;: 0, &#x27;num_added_rows&#x27;: 50, &#x27;execution_time_ms&#x27;: 1, &#x27;num_retries&#x27;: 0}
+  v 2  MERGE                      metrics={&#x27;num_source_rows&#x27;: 100000, &#x27;num_target_rows_inserted&#x27;: 50000, &#x27;num_target_rows_updated&#x27;: 50000, &#x27;num_target_rows_deleted&#x27;: 0, &#x27;num_target_rows_copied&#x27;: 50000, &#x27;num_output_rows&#x27;: 150000, &#x27;num_target_files_scanned&#x27;: 1, &#x27;num_target_files_skipped_during_scan&#x27;: 0, &#x27;num_target_files_added&#x27;: 1, &#x27;num_target_files_removed&#x27;: 1, &#x27;execution_time_ms&#x27;: 46, &#x27;scan_time_ms&#x27;: 34, &#x27;rewrite_time_ms&#x27;: 5}
+  v 1  WRITE                      metrics={&#x27;num_added_files&#x27;: 1, &#x27;num_removed_files&#x27;: 1, &#x27;num_partitions&#x27;: 0, &#x27;num_added_rows&#x27;: 100000, &#x27;execution_time_ms&#x27;: 9, &#x27;num_retries&#x27;: 0}
+  v 0  WRITE                      metrics={&#x27;num_added_files&#x27;: 1, &#x27;num_removed_files&#x27;: 0, &#x27;num_partitions&#x27;: 0, &#x27;num_added_rows&#x27;: 100000, &#x27;execution_time_ms&#x27;: 33, &#x27;num_retries&#x27;: 0}
+
+
+Cell [5]
+v0 row count: 100000
+v1 schema:    [&#x27;customer_id&#x27;, &#x27;status&#x27;, &#x27;score&#x27;, &#x27;tier&#x27;]
+
+
+Cell [6]
+RESTORE → v2: 0.00s   (target &lt; 30s)
+Rows with score&lt;0 after restore: 0  (expected 0)
+
+
+Cell [7]
+  v 4  RESTORE                  
+  v 3  WRITE                    
+  v 2  MERGE                    
+  v 1  WRITE                    
+  v 0  WRITE                    
+
+Total versions: 5  (target ≥ 5)
+
+
+Cell [8]
+  [PASS] history ≥ 5 versions
+  [PASS] history includes the RESTORE
+  [PASS] MERGE recorded in history
+  [PASS] bad rows gone after restore
+
+NB3 complete.
+</pre></html>

@@ -1,0 +1,40 @@
+Cell [3]
+MERGE 100K rows: 0.05s
+MERGE metrics: {'num_source_rows': 100000, 'num_target_rows_inserted': 50000, 'num_target_rows_updated': 50000, 'num_target_rows_deleted': 0, 'num_target_rows_copied': 50000, 'num_output_rows': 150000, 'num_target_files_scanned': 1, 'num_target_files_skipped_during_scan': 0, 'num_target_files_added': 1, 'num_target_files_removed': 1, 'execution_time_ms': 46, 'scan_time_ms': 34, 'rewrite_time_ms': 5}
+Verified: 50K updates + 50K inserts; target 150K unique customers.
+
+
+Cell [4]
+  v 3  WRITE                      metrics={'num_added_files': 1, 'num_removed_files': 0, 'num_partitions': 0, 'num_added_rows': 50, 'execution_time_ms': 1, 'num_retries': 0}
+  v 2  MERGE                      metrics={'num_source_rows': 100000, 'num_target_rows_inserted': 50000, 'num_target_rows_updated': 50000, 'num_target_rows_deleted': 0, 'num_target_rows_copied': 50000, 'num_output_rows': 150000, 'num_target_files_scanned': 1, 'num_target_files_skipped_during_scan': 0, 'num_target_files_added': 1, 'num_target_files_removed': 1, 'execution_time_ms': 46, 'scan_time_ms': 34, 'rewrite_time_ms': 5}
+  v 1  WRITE                      metrics={'num_added_files': 1, 'num_removed_files': 1, 'num_partitions': 0, 'num_added_rows': 100000, 'execution_time_ms': 9, 'num_retries': 0}
+  v 0  WRITE                      metrics={'num_added_files': 1, 'num_removed_files': 0, 'num_partitions': 0, 'num_added_rows': 100000, 'execution_time_ms': 33, 'num_retries': 0}
+
+
+Cell [5]
+v0 row count: 100000
+v1 schema:    ['customer_id', 'status', 'score', 'tier']
+
+
+Cell [6]
+RESTORE → v2: 0.00s   (target < 30s)
+Rows with score<0 after restore: 0  (expected 0)
+
+
+Cell [7]
+  v 4  RESTORE                  
+  v 3  WRITE                    
+  v 2  MERGE                    
+  v 1  WRITE                    
+  v 0  WRITE                    
+
+Total versions: 5  (target ≥ 5)
+
+
+Cell [8]
+  [PASS] history ≥ 5 versions
+  [PASS] history includes the RESTORE
+  [PASS] MERGE recorded in history
+  [PASS] bad rows gone after restore
+
+NB3 complete.

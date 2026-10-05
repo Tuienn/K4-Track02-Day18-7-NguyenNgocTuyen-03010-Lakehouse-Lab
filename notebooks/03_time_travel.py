@@ -50,7 +50,7 @@ updates = pl.DataFrame({
     "tier":        ["platinum"] * 100_000,
 })
 t0 = time.time()
-(DeltaTable(table_path)
+merge_metrics = (DeltaTable(table_path)
     .merge(source=updates.to_arrow(),
            predicate="t.customer_id = s.customer_id",
            source_alias="s", target_alias="t")
@@ -58,6 +58,15 @@ t0 = time.time()
     .when_not_matched_insert_all()
     .execute())
 print(f"MERGE 100K rows: {time.time()-t0:.2f}s")
+print("MERGE metrics:", merge_metrics)
+assert updates.height == 100_000
+assert merge_metrics["num_target_rows_updated"] == 50_000
+assert merge_metrics["num_target_rows_inserted"] == 50_000
+merged = pl.from_arrow(DeltaTable(table_path).to_pyarrow_table())
+assert merged.height == 150_000
+assert merged.filter(pl.col("status") == "vip").height == 100_000
+assert merged["customer_id"].n_unique() == 150_000
+print("Verified: 50K updates + 50K inserts; target 150K unique customers.")
 
 # v3 — simulate bad data
 bad = pl.DataFrame({
@@ -132,3 +141,10 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB3 incomplete — see FAIL rows above"
 print("\nNB3 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả — Nguyễn Ngọc Tuyền, 2A202603010
+# MERGE dùng key customer_id: 50K key trùng được update và 50K key mới insert.
+# Target có 150K khách hàng duy nhất; assertion đối chiếu cả metrics lẫn bảng.
+# v0 đọc lại vẫn có 100K dòng. Append lỗi ở v3 còn trong audit history; restore(2)
+# tạo v4 mới, không xóa lịch sử. Bảng hiện tại không còn score âm sau RESTORE.
