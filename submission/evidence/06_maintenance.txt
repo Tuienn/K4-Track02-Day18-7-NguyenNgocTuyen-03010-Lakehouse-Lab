@@ -1,0 +1,141 @@
+Cell [3]
+Ingested 100,000 rows in 200 commits (4.5s)
+
+BASELINE (the mess)      files= 200  data=  10.1 MB  log= 385.7 KB (200 json)  rows=100,000
+
+Average file size: 51.5 KB   ← production target is 128–512 MB
+
+
+Cell [4]
+Full-scan GETs/day at 200 files: 10,000,000  →  $4.00/day just in requests
+Same data in 4 compacted files:      200,000  →  $0.08/day
+
+
+Cell [5]
+AFTER compaction         files=  11  data=  16.1 MB  log= 434.4 KB (201 json)  rows=100,000
+
+filesAdded=11  filesRemoved=200
+File reduction: 200 → 11 (18× fewer)
+Note: data bytes went UP slightly — compaction WRITES new files before
+the old ones are reclaimed. You pay twice, briefly. Budget for it.
+
+
+Cell [6]
+Point query user_id=12345
+  before clustering: must open 11/11 files
+  after  clustering: must open 1/10 files
+  → skip rate: 90% of files never touched
+
+Unclustered data has overlapping min/max ranges, so stats prove nothing
+and the engine must read everything. Clustering is what makes stats USEFUL.
+
+
+Cell [7]
+VACUUM would reclaim 211 tombstoned files (16.1 MB)
+AFTER vacuum             files=  10  data=   6.2 MB  log= 445.1 KB (204 json)  rows=100,000
+
+Reclaimed: 16.1 MB
+Time travel to v0 is now GONE — that is the trade you just made.
+
+
+Cell [8]
+Rows reported by the table: 100,000   (orphans are invisible)
+Parquet files on disk:      13
+Parquet files in the log:   10
+→ 3 files you pay for and cannot see
+
+
+Cell [9]
+VACUUM dry-run now lists: 211 tombstone candidates
+Candidates still physically present: 0
+Orphans still on disk:    3
+
+`deltalake` (the Rust/Python implementation used here) reclaims files the
+transaction log has TOMBSTONED. A file that was never committed was never
+tombstoned, so the log has no idea it exists.
+
+Spark's VACUUM additionally lists the table directory, which is why the slide
+lists VACUUM under orphan removal — but you should never *assume* your engine
+does the directory pass. Verify it, or run the diff yourself:
+
+
+
+Cell [10]
+Orphans found: 3  (21.2 KB)
+  part-99990-crashed-writer-c000.snappy.parquet
+  part-99991-crashed-writer-c000.snappy.parquet
+  part-99992-crashed-writer-c000.snappy.parquet
+
+After removal — on disk: 10, in log: 10
+
+⚠️ The age guard is not optional. Without it you will delete files that a
+   concurrent writer has written but not yet committed, and corrupt the table.
+
+
+Cell [11]
+JSON log entries a cold reader would replay: 204
+Checkpoint written: 00000000000000000203.checkpoint.parquet
+_last_checkpoint present: True
+
+A reader now loads 1 checkpoint + the few JSONs after it, not all 200.
+For CDC/streaming tables this is the difference between a 200 ms and a
+20 s cold start — and it is why the slide calls it the 5th job.
+
+
+Cell [12]
+before expiry  snapshots= 20  avro= 40  json= 21  metadata=346.2 KB
+
+
+Cell [13]
+after expiry   snapshots=  3  avro= 40  json= 22  metadata=354.5 KB
+
+Rows still intact: 2,000
+
+
+Cell [14]
+snapshots: 20 → 3  (17 expired)
+avro files on disk: 40 → 40  (deleted: 0)
+metadata bytes: 346.2 KB → 354.5 KB
+
+Expiry alone reclaimed NOTHING. Now find what it stranded:
+
+
+Cell [15]
+Stranded manifest lists: 17  (37.2 KB)
+  snap-1930763316427295654-0-a5f05f42-489b-411e-bc33-8ef224636c75.avro
+  snap-5560267347059687012-0-a436ef76-bd17-4a3f-a5d3-2d24e1206546.avro
+  snap-3811590953580496405-0-37e65b2d-04bc-4e72-a1d3-d6ab3e6ef1bd.avro
+  ... and 14 more
+after sweep    snapshots=  3  avro= 23  json= 22  metadata=317.3 KB
+
+Reclaimed by chaining expiry → orphan removal: 37.2 KB
+Rows still intact: 2,000
+
+→ Job 3 and Job 4 are a PAIR. Running expiry without a sweep is why
+  teams report 'we expire snapshots but the S3 bill never drops'.
+
+
+Cell [16]
+Managed compaction, 500 GB / 2,000,000 files, daily:
+  per-GB component:     $750/mo
+  per-object component: $240/mo
+  TOTAL:                $990/mo
+
+The object component is 24% of the bill —
+it is driven by FILE COUNT, not data volume. Fixing your writer's
+trigger interval is cheaper than paying someone to clean up after it.
+
+
+Cell [17]
+  [PASS] compaction ≥ 10x fewer files
+  [PASS] clustering skips ≥ 50% files
+  [PASS] vacuum reclaimed bytes
+  [PASS] delta data intact
+  [PASS] 3 delta orphans removed
+  [PASS] no delta orphans remain
+  [PASS] checkpoint written
+  [PASS] iceberg expired to 3 snaps
+  [PASS] iceberg stranded files swept
+  [PASS] iceberg data intact
+
+NB6 complete.

@@ -44,6 +44,15 @@ from lakehouse import catalog, count_files, du, human, namespace, path, reset, r
 TABLE = path("scratch", "maint_events")
 reset(TABLE)
 
+
+def data_files_on_disk() -> int:
+    return sum(1 for f in Path(TABLE).rglob("*.parquet") if "_delta_log" not in f.parts)
+
+
+def candidate_path(candidate: str) -> Path:
+    p = Path(candidate.replace("file://", ""))
+    return p if p.is_absolute() else Path(TABLE) / p
+
 # %% [markdown]
 # ## 0. Manufacture the problem: 200 micro-batches
 #
@@ -180,11 +189,12 @@ print("and the engine must read everything. Clustering is what makes stats USEFU
 dt = DeltaTable(TABLE)
 doomed = dt.vacuum(retention_hours=0, dry_run=True, enforce_retention_duration=False)
 print(f"VACUUM would reclaim {len(doomed)} tombstoned files "
-      f"({human(sum(du(f) for f in doomed))})")
+      f"({human(sum(du(candidate_path(f)) for f in doomed))})")
 
 before_vacuum = du(TABLE)
 dt.vacuum(retention_hours=0, dry_run=False, enforce_retention_duration=False)
 after_vacuum = snapshot_metrics("AFTER vacuum")
+vacuum_reclaimed_bytes = before_vacuum - du(TABLE)
 print(f"\nReclaimed: {human(before_vacuum - du(TABLE))}")
 print(f"Time travel to v0 is now GONE — that is the trade you just made.")
 
@@ -209,9 +219,9 @@ for i in range(3):
 
 dt = DeltaTable(TABLE)
 print(f"Rows reported by the table: {dt.count():,}   (orphans are invisible)")
-print(f"Parquet files on disk:      {count_files(TABLE)}")
+print(f"Parquet files on disk:      {data_files_on_disk()}")
 print(f"Parquet files in the log:   {len(dt.file_uris())}")
-print(f"→ {count_files(TABLE) - len(dt.file_uris())} files you pay for and cannot see")
+print(f"→ {data_files_on_disk() - len(dt.file_uris())} files you pay for and cannot see")
 
 # %% [markdown]
 # ### Measured finding: `VACUUM` alone does **not** catch these
@@ -220,8 +230,9 @@ print(f"→ {count_files(TABLE) - len(dt.file_uris())} files you pay for and can
 
 # %%
 still = DeltaTable(TABLE).vacuum(retention_hours=0, dry_run=True, enforce_retention_duration=False)
-print(f"VACUUM dry-run now finds: {len(still)} files")
-print(f"Orphans still on disk:    {count_files(TABLE) - len(DeltaTable(TABLE).file_uris())}")
+print(f"VACUUM dry-run now lists: {len(still)} tombstone candidates")
+print(f"Candidates still physically present: {sum(candidate_path(f).is_file() for f in still)}")
+print(f"Orphans still on disk:    {data_files_on_disk() - len(DeltaTable(TABLE).file_uris())}")
 print("""
 `deltalake` (the Rust/Python implementation used here) reclaims files the
 transaction log has TOMBSTONED. A file that was never committed was never
@@ -260,7 +271,7 @@ for f in found:
     print(f"  {os.path.basename(f)}")
     os.remove(f)
 
-print(f"\nAfter removal — on disk: {count_files(TABLE)}, in log: {len(DeltaTable(TABLE).file_uris())}")
+print(f"\nAfter removal — on disk: {data_files_on_disk()}, in log: {len(DeltaTable(TABLE).file_uris())}")
 print("\n⚠️ The age guard is not optional. Without it you will delete files that a")
 print("   concurrent writer has written but not yet committed, and corrupt the table.")
 
@@ -276,7 +287,7 @@ json_before = len(list(log_dir.glob("*.json")))
 
 DeltaTable(TABLE).create_checkpoint()
 
-ckpt = list(log_dir.glob("*.checkpoint.parquet"))
+ckpt = sorted(log_dir.glob("*.checkpoint.parquet"), reverse=True)
 print(f"JSON log entries a cold reader would replay: {json_before}")
 print(f"Checkpoint written: {ckpt[0].name if ckpt else 'NONE'}")
 print(f"_last_checkpoint present: {(log_dir / '_last_checkpoint').exists()}")
@@ -426,7 +437,8 @@ print("trigger interval is cheaper than paying someone to clean up after it.")
 checks = {
     "compaction ≥ 10x fewer files": base["data files"] / max(after_compact["data files"], 1) >= 10,
     "clustering skips ≥ 50% files": (1 - after_cluster / max(total_files, 1)) >= 0.5,
-    "vacuum reclaimed bytes":       before_vacuum > du(TABLE),
+    "vacuum reclaimed bytes":       vacuum_reclaimed_bytes > 0,
+    "delta data intact":             DeltaTable(TABLE).count() == N_BATCHES * ROWS_PER_BATCH,
     "3 delta orphans removed":      len(found) == 3,
     "no delta orphans remain":      find_orphans(TABLE) == [],
     "checkpoint written":           bool(ckpt) and (log_dir / "_last_checkpoint").exists(),
@@ -438,3 +450,23 @@ for k, v in checks.items():
     print(f"  [{'PASS' if v else 'FAIL'}] {k}")
 assert all(checks.values()), "NB6 incomplete — see FAIL rows above"
 print("\nNB6 complete.")
+
+# %% [markdown]
+# ## Giải thích kết quả — Nguyễn Ngọc Tuyền, 2A202603010
+# Compaction giảm file đang live nhưng bytes trên đĩa có thể tăng do vẫn giữ
+# file tombstone để time travel. Clustering đánh giá bằng min/max user_id,
+# không bằng thời gian query. Vacuum ở delta-rs của lần chạy này thu hồi
+# tombstone nhưng bỏ sót 3 orphan chưa commit: hiệu tập hợp disk−live files
+# kèm age guard mới tìm ra chúng. Scratch retention=0 chỉ dùng để đo ở lab.
+# PyIceberg expiry giảm 20 xuống 3 snapshot mà không xóa manifest list vật lý;
+# sweep dọn phần không còn tham chiếu. Đây là hành vi phiên bản thư viện đo
+# trong lab, không kết luận chung cho mọi engine. Thu hồi bytes của vacuum
+# được chốt ngay sau vacuum, trước orphan/checkpoint để không lẫn các job.
+# Checkpoint Parquet và _last_checkpoint giúp reader bớt replay JSON; kiểm tra
+# Delta vẫn đủ 100K dòng và Iceberg vẫn đủ 2K dòng sau maintenance.
+
+# %% [markdown]
+# Đếm Parquet dữ liệu loại trừ _delta_log (checkpoint cũng là Parquet).
+# Candidate VACUUM có thể trả đường dẫn tương đối và tombstone đã xóa;
+# output tách số candidate khỏi số file vật lý còn tồn tại. Checkpoint in ra
+# bản mới nhất; các mốc thời gian/cost trong phần đề là ví dụ, chưa benchmark.
